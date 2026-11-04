@@ -1,8 +1,7 @@
 import uuid
 from datetime import date
 
-from fastapi import APIRouter, Body, Depends, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -57,10 +56,6 @@ SHIFT_EXAMPLES = {
                   "notes": "Covering for Ben"},
     },
 }
-
-
-async def roster_error_handler(_: Request, exc: RosterError) -> JSONResponse:
-    return JSONResponse(status_code=exc.status_code, content={"detail": exc.message})
 
 
 def _conflict_if_duplicate(db: Session, what: str):

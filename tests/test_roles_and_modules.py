@@ -37,7 +37,7 @@ def test_nobody_can_create_a_second_owner(client):
 def test_module_gating(client):
     token = register(client, "Roster Only Co", "owner@r.com", modules=["roster"])
     assert client.get("/api/roster/job-roles", headers=auth(token)).status_code == 200
-    assert client.get("/api/resources/status", headers=auth(token)).status_code == 403
+    assert client.get("/api/resources/types", headers=auth(token)).status_code == 403
 
 
 def test_owner_can_switch_modules(client):
@@ -46,7 +46,7 @@ def test_owner_can_switch_modules(client):
     assert res.status_code == 200
     assert res.json()["modules"] == ["resource"]
     assert client.get("/api/roster/job-roles", headers=auth(token)).status_code == 403
-    assert client.get("/api/resources/status", headers=auth(token)).status_code == 200
+    assert client.get("/api/resources/types", headers=auth(token)).status_code == 200
 
 
 def test_non_owner_cannot_switch_modules(client):

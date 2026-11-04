@@ -13,6 +13,7 @@ from datetime import date, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core.errors import DomainError
 from app.models import User
 from app.modules.roster.models import JobRole, Shift, ShiftType, StaffJobRole
 from app.modules.roster.schemas import ShiftIn
@@ -21,13 +22,8 @@ MAX_SHIFT = timedelta(hours=16)
 MAX_QUERY_RANGE = timedelta(days=62)
 
 
-class RosterError(Exception):
-    """A rule was broken. status_code tells the router which HTTP code to send."""
-
-    def __init__(self, status_code: int, message: str):
-        super().__init__(message)
-        self.status_code = status_code
-        self.message = message
+class RosterError(DomainError):
+    """A roster rule was broken. Handled by the shared DomainError handler."""
 
 
 def _not_found(what: str) -> RosterError:
