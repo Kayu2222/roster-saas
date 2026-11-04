@@ -14,6 +14,7 @@ Multi-tenant roster & resource management API. Any company can sign up, choose t
 | Companies need different features | Each company switches modules on or off; endpoints are gated with `require_module(...)`. |
 | Who can do what | Roles: `owner` (one per company, controls modules), `manager`, `staff`. |
 | Credentials | Passwords hashed with bcrypt, never returned by the API. Login gives the same error for unknown email and wrong password. |
+| Rosters that make sense | Each company defines its own job roles and shift templates. Shifts are rejected if they double-book a person, need a role the person doesn't hold, end before they start, or run longer than 16 hours. Overnight shifts are handled. |
 
 ## Run locally
 
@@ -31,7 +32,7 @@ Open http://localhost:8000/docs, call `POST /api/auth/register`, then click **Au
 pytest -q
 ```
 
-## API (step 1)
+## API
 
 | Method | Path | Who |
 |---|---|---|
@@ -42,7 +43,13 @@ pytest -q
 | PUT | `/api/tenant/modules` | owner |
 | GET | `/api/users`, `/api/users/{id}` | any signed-in user (own company only) |
 | POST | `/api/users` | owner, manager (only owner can add managers) |
-| GET | `/api/roster/status`, `/api/resources/status` | companies with that module on |
+| GET / POST / DELETE | `/api/roster/job-roles` | read: anyone · write: owner, manager |
+| GET / PUT | `/api/roster/staff/{user_id}/job-roles` | read: anyone · write: owner, manager |
+| GET / POST / DELETE | `/api/roster/shift-types` | read: anyone · write: owner, manager |
+| POST / DELETE | `/api/roster/shifts` | owner, manager |
+| GET | `/api/roster/shifts?from=&to=&user_id=` | managers see all; staff only their own |
+| GET | `/api/roster/shifts/mine?from=&to=` | any signed-in user |
+| GET | `/api/resources/status` | companies with the resource module on (placeholder until step 3) |
 | GET | `/health` | anyone |
 
 ## Project layout
@@ -55,14 +62,15 @@ app/
   models.py          Tenant, User
   schemas.py         request/response models
   deps.py            current user, role and module checks
-  routers/           auth, company, users, module entry points
-tests/               isolation, auth, roles and module gating
+  routers/           auth, company, users, resource placeholder
+  modules/roster/    models, schemas, service (business rules), router
+tests/               isolation, auth, roles, module gating, roster rules
 ```
 
 ## Roadmap
 
 - [x] **Step 1** – Multi-tenant core: sign-up, login, roles, module switching, isolation tests
-- [ ] **Step 2** – Roster module: company-defined roles and shift types, date-based shifts, clash checks
+- [x] **Step 2** – Roster module: company-defined roles and shift types, date-based shifts, clash checks
 - [ ] **Step 3** – Resource module: company-defined resource types, bookings with overlap checks, optimistic locking
 - [ ] **Step 4** – Docker, GitHub Actions (OIDC), Azure Container Apps, PostgreSQL, Alembic, Key Vault
 - [ ] **Step 5** – Web front end
@@ -71,4 +79,7 @@ tests/               isolation, auth, roles and module gating
 
 - **Shared database, `tenant_id` column** (vs. one database per tenant): cheapest to run and simplest to operate at this scale; isolation is enforced in one place and covered by tests.
 - **One email = one company** for the MVP. Users belonging to several companies would need a membership table; deliberately left out.
+- **Roster rules live in `service.py`, not in the routes**, so they read as plain business logic and are tested end to end.
+- **Shift times are company-local wall-clock times** (no timezone). A per-company timezone can be added without changing the tables.
+- **Known limitation:** the double-booking check runs in application code, so two simultaneous requests could both pass it. On PostgreSQL (step 4) this gets a database-level exclusion constraint so the database itself refuses overlapping shifts.
 - Tables are created on startup for now; migrations (Alembic) come with PostgreSQL in step 4.
