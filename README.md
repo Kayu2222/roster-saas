@@ -5,7 +5,7 @@
 Multi-tenant roster & resource management API. Any company can sign up, choose the modules it needs (staff rostering, resource booking, or both), and manage its own people — fully isolated from every other company on the platform.
 
 **Stack:** Python · FastAPI · SQLAlchemy 2 · PostgreSQL · Alembic · JWT · pytest · Docker · GitHub Actions
-**Planned deployment:** Azure Container Apps
+**Cloud:** Azure Container Apps · Azure Database for PostgreSQL · Container Registry · Key Vault · Bicep · GitHub OIDC
 
 ## Why it's interesting
 
@@ -54,6 +54,41 @@ export TEST_DATABASE_URL=postgresql+psycopg://roster:roster@localhost:5433/roste
 pytest -q                     # wipes that database first
 ```
 
+## Deployment on Azure
+
+```
+git push ──> GitHub Actions: tests (SQLite + PostgreSQL) ──> Docker smoke test ──> deploy job
+                                                                                     │ OIDC sign-in, no stored password
+                                                                                     ▼
+                         Azure Container Registry ◀── push image ────────────────────┘
+                                  │ pull (managed identity)
+                                  ▼
+ users ──HTTPS──> Azure Container Apps (scales to zero) ──> Azure Database for PostgreSQL
+                                  │ secrets via managed identity
+                                  ▼
+                               Key Vault (database URL, JWT secret)
+```
+
+Everything is defined in [`infra/main.bicep`](infra/main.bicep) (Infrastructure as Code).
+
+| Concern | Choice |
+|---|---|
+| No passwords in GitHub | GitHub Actions signs in with **OIDC** through a federated managed identity, trusted only for pushes to `main` of this repository. The repo stores identifiers only. |
+| No passwords in config | Database URL and JWT secret are generated once by `setup.ps1`, written straight to **Key Vault**, and read by the app through its **managed identity**. |
+| Least privilege | The deploy identity can push images and update resources in this one resource group only. The app identity can only pull images and read its two secrets. |
+| Cost | Sized to the Azure for Students free allowances: Container Apps consumption plan with scale-to-zero, PostgreSQL Burstable B1ms with 32 GB, Standard registry. Logs capped at 0.1 GB/day. |
+| Trade-offs (documented, deliberate) | The database accepts connections from Azure services (password + TLS still required) instead of a private VNet, and the app runs one replica so start-up migrations are simple. Both are the next things to change for real production traffic. |
+
+**Set up once** (needs Azure CLI and Docker Desktop, signed in with `az login`):
+
+```powershell
+.\infra\setup.ps1
+```
+
+It creates the resource group in `australiaeast`, deploys the infrastructure, pushes the first image and prints the GitHub repository variables to add. After that, every push to `main` is tested and deployed automatically.
+
+**Remove everything:** `.\infra\teardown.ps1`
+
 ## API
 
 | Method | Path | Who |
@@ -99,7 +134,9 @@ tests/               isolation, auth, roles, module gating, roster and booking r
 migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints
 Dockerfile           multi-stage image, runs as non-root, migrates on start
 docker-compose.yml   local API + PostgreSQL
-.github/workflows/   CI: tests on SQLite and PostgreSQL, migration drift check, Docker smoke test
+.github/workflows/   CI/CD: tests on SQLite and PostgreSQL, migration drift check, Docker smoke test,
+                     deploy to Azure
+infra/               Bicep infrastructure, one-time setup and teardown scripts
 ```
 
 ## Roadmap
