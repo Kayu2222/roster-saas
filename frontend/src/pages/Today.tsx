@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { api, type Booking, type JobRole, type Resource, type Shift, type User } from "../api";
+import { api, type Booking, type JobRole, type Product, type Resource, type Shift, type User } from "../api";
 import { hhmm, isoDate } from "../dates";
 import { useSession } from "../session";
 import { PageHead } from "../components/Shell";
@@ -9,6 +9,7 @@ export function Today() {
   const { me, hasModule, canManage } = useSession();
   const roster = hasModule("roster");
   const resources = hasModule("resource");
+  const inventory = hasModule("inventory");
   const today = isoDate(new Date());
   const nowLocal = `${today}T${new Date().toTimeString().slice(0, 5)}`;
 
@@ -26,8 +27,9 @@ export function Today() {
           api<Booking[]>(`/api/resources/bookings?from=${today}&to=${today}`),
         ])
       : [[], []];
-    return { users, roles, shifts, resList, bookings };
-  }, [roster, resources]);
+    const lowStock = inventory ? await api<Product[]>("/api/inventory/products?low_only=true") : [];
+    return { users, roles, shifts, resList, bookings, lowStock };
+  }, [roster, resources, inventory]);
 
   const roleIds = data?.roles.map((r) => r.id) ?? [];
   const name = (id: string) => data?.users.find((u) => u.id === id)?.name ?? "Someone";
@@ -38,6 +40,12 @@ export function Today() {
   return (
     <>
       <PageHead title={`${greeting}, ${me?.user.name.split(" ")[0]}`} sub={dateText} />
+      {data && data.lowStock.length > 0 && (
+        <div className="notice" role="status">
+          <strong>Running low:</strong> {data.lowStock.map((p) => `${p.name} (${p.on_hand} ${p.unit})`).join(", ")}.{" "}
+          <Link to="/stock">Open stock</Link>
+        </div>
+      )}
       <div className={roster && resources ? "grid-2" : "stack"} style={{ alignItems: "start" }}>
         {roster && (
           <section className="panel">

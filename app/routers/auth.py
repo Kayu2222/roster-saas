@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.security import create_access_token, hash_password, verify_password
 from app.core.tenancy import set_tenant
 from app.db import get_db
-from app.models import Module, Role, Tenant, User
+from app.models import Role, Tenant, User
 from app.schemas import LoginRequest, RegisterCompanyRequest, TokenResponse
 
 router = APIRouter(prefix="/api/auth", tags=["Auth"])
@@ -26,11 +26,8 @@ def register_company(body: RegisterCompanyRequest, db: Session = Depends(get_db)
     if _email_taken(db, email):
         raise HTTPException(status.HTTP_409_CONFLICT, "Email already registered")
 
-    tenant = Tenant(
-        name=body.company_name,
-        roster_enabled=Module.ROSTER in body.modules,
-        resource_enabled=Module.RESOURCE in body.modules,
-    )
+    tenant = Tenant(name=body.company_name)
+    tenant.set_modules(body.modules)
     db.add(tenant)
     db.flush()  # assigns tenant.id
 

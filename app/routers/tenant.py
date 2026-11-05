@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.deps import get_current_tenant, get_current_user, require_roles
-from app.models import Module, Role, Tenant, User
+from app.models import Role, Tenant, User
 from app.schemas import MeOut, TenantOut, UpdateModulesRequest, UserOut
 
 router = APIRouter(prefix="/api", tags=["Company"])
@@ -27,7 +27,6 @@ def update_modules(
     db: Session = Depends(get_db),
 ):
     """Owner switches modules on or off. Data is kept when a module is switched off."""
-    tenant.roster_enabled = Module.ROSTER in body.modules
-    tenant.resource_enabled = Module.RESOURCE in body.modules
+    tenant.set_modules(body.modules)
     db.commit()
     return tenant

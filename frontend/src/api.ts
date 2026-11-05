@@ -65,7 +65,7 @@ export async function api<T>(path: string, options: { method?: string; body?: un
 
 // ---------- types mirroring the API ----------
 
-export type Module = "roster" | "resource";
+export type Module = "roster" | "resource" | "inventory";
 export type Role = "owner" | "manager" | "staff";
 
 export interface Tenant { id: string; name: string; modules: Module[]; created_at: string }
@@ -88,5 +88,16 @@ export interface Resource {
 }
 export interface Booking {
   id: string; resource_id: string; start_at: string; end_at: string; purpose: string | null;
-  status: "active" | "cancelled"; booked_by: string; cancelled_at: string | null;
+  status: "active" | "cancelled"; booked_by: string; client_id: string | null; cancelled_at: string | null;
+}
+
+export interface Client {
+  id: string; name: string; email: string | null; phone: string | null; notes: string | null; is_active: boolean; created_at: string;
+}
+export interface ActivityItem { kind: "booking" | "usage"; at: string; title: string; detail: string | null }
+
+export interface Product { id: string; name: string; unit: string; on_hand: number; reorder_level: number; low_stock: boolean }
+export interface Movement {
+  id: string; product_id: string; change: number; balance_after: number; reason: "received" | "used" | "counted";
+  client_id: string | null; note: string | null; created_by: string; created_at: string;
 }

@@ -16,7 +16,7 @@ class RegisterCompanyRequest(BaseModel):
     owner_name: str = Field(min_length=1, max_length=120)
     email: EmailStr
     password: str = Password
-    modules: list[Module] = Field(min_length=1, description="Pick 'roster', 'resource', or both")
+    modules: list[Module] = Field(min_length=1, description="Any of 'roster', 'resource', 'inventory'")
 
 
 class LoginRequest(BaseModel):

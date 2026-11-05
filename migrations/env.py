@@ -7,6 +7,7 @@ from sqlalchemy import engine_from_config, pool
 
 from app.core.config import settings
 from app.db import Base
+from app.modules.inventory import models as _inventory_models  # noqa: F401  (register tables)
 from app.modules.resources import models as _resource_models  # noqa: F401  (register tables)
 from app.modules.roster import models as _roster_models  # noqa: F401
 from app import models as _core_models  # noqa: F401

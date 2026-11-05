@@ -13,6 +13,8 @@ import { People } from "./pages/People";
 import { Resources } from "./pages/Resources";
 import { Bookings } from "./pages/Bookings";
 import { Settings } from "./pages/Settings";
+import { Clients } from "./pages/Clients";
+import { Stock } from "./pages/Stock";
 
 function RequireSignIn({ children }: { children: ReactNode }) {
   const { me, loading } = useSession();
@@ -26,7 +28,7 @@ function GuestOnly({ children }: { children: ReactNode }) {
   return me ? <Navigate to="/" replace /> : <>{children}</>;
 }
 
-function ModuleRoute({ module, children }: { module: "roster" | "resource"; children: ReactNode }) {
+function ModuleRoute({ module, children }: { module: "roster" | "resource" | "inventory"; children: ReactNode }) {
   const { hasModule } = useSession();
   return hasModule(module) ? <>{children}</> : <Navigate to="/" replace />;
 }
@@ -42,6 +44,8 @@ function App() {
         <Route path="roster/setup" element={<ModuleRoute module="roster"><RosterSetup /></ModuleRoute>} />
         <Route path="bookings" element={<ModuleRoute module="resource"><Bookings /></ModuleRoute>} />
         <Route path="resources" element={<ModuleRoute module="resource"><Resources /></ModuleRoute>} />
+        <Route path="stock" element={<ModuleRoute module="inventory"><Stock /></ModuleRoute>} />
+        <Route path="clients" element={<Clients />} />
         <Route path="people" element={<People />} />
         <Route path="settings" element={<Settings />} />
       </Route>

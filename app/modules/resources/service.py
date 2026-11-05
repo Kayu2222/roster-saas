@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
 from app.core.errors import DomainError, is_overlap_violation
-from app.models import Role, User
+from app.models import Client, Role, User
 from app.modules.resources.models import Booking, BookingStatus, Resource, ResourceStatus, ResourceType
 from app.modules.resources.schemas import BookingIn, ResourceIn, ResourceUpdate
 
@@ -125,6 +125,13 @@ def create_booking(db: Session, body: BookingIn, booked_by: uuid.UUID) -> Bookin
     if resource.status != ResourceStatus.AVAILABLE:
         raise DomainError(409, f"{resource.name} is out of service")
 
+    if body.client_id is not None:
+        client = db.get(Client, body.client_id)
+        if client is None:
+            raise DomainError(404, "Client not found")
+        if not client.is_active:
+            raise DomainError(422, f"{client.name} is archived")
+
     clash = find_overlap(db, resource.id, body.start_at, body.end_at)
     if clash is not None:
         raise DomainError(
@@ -132,7 +139,8 @@ def create_booking(db: Session, body: BookingIn, booked_by: uuid.UUID) -> Bookin
         )
 
     booking = Booking(
-        resource_id=resource.id, start_at=body.start_at, end_at=body.end_at, purpose=body.purpose, booked_by=booked_by
+        resource_id=resource.id, start_at=body.start_at, end_at=body.end_at, purpose=body.purpose, booked_by=booked_by,
+        client_id=body.client_id,
     )
     db.add(booking)
     # Touch the resource so its version is bumped in the same transaction.

@@ -83,7 +83,7 @@ export function Register() {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (!modules.length) return setError("Choose at least one: rosters, bookings, or both.");
+    if (!modules.length) return setError("Choose at least one feature.");
     run(async () => {
       const { access_token } = await api<{ access_token: string }>("/api/auth/register", {
         method: "POST",
@@ -125,6 +125,11 @@ export function Register() {
             <input type="checkbox" checked={modules.includes("resource")} onChange={() => toggle("resource")} />
             <strong>Resource bookings</strong>
             <small>Rooms, beds, vehicles or equipment people can book.</small>
+          </label>
+          <label>
+            <input type="checkbox" checked={modules.includes("inventory")} onChange={() => toggle("inventory")} />
+            <strong>Stock</strong>
+            <small>Medicine, supplies or products that get used up, with low-stock warnings.</small>
           </label>
         </fieldset>
         <button className="btn btn-primary" disabled={busy}>{busy ? "Creating company" : "Create company"}</button>

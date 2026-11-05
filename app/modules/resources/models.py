@@ -78,6 +78,8 @@ class Booking(TenantScoped, Base):
         Enum(BookingStatus, native_enum=False, length=20), default=BookingStatus.ACTIVE, nullable=False
     )
     booked_by: Mapped[uuid.UUID] = mapped_column(Uuid, ForeignKey("users.id"), nullable=False)
+    # Who the booking is for, if it's for a client (a patient's bed, a customer's room).
+    client_id: Mapped[uuid.UUID | None] = mapped_column(Uuid, ForeignKey("clients.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
     cancelled_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 

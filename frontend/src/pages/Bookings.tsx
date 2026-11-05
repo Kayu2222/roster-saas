@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { api, type Booking, type Resource, type ResourceType, type User } from "../api";
+import { api, type Booking, type Client, type Resource, type ResourceType, type User } from "../api";
 import { addDays, hhmm, isoDate, localDateTime, parseLocal } from "../dates";
 import { useSession } from "../session";
 import { PageHead } from "../components/Shell";
@@ -12,18 +12,20 @@ export function Bookings() {
 
   const [q, setQ] = useState({ date: today, start: "09:00", end: "10:00", type: "" });
   const [purpose, setPurpose] = useState("");
+  const [clientId, setClientId] = useState("");
   const [free, setFree] = useState<Resource[] | null>(null);
   const search = useSubmit();
   const book = useSubmit();
 
   const { data, reload } = useLoad(async () => {
-    const [types, resources, users, bookings] = await Promise.all([
+    const [types, resources, users, bookings, clients] = await Promise.all([
       api<ResourceType[]>("/api/resources/types"),
       api<Resource[]>("/api/resources"),
       api<User[]>("/api/users"),
       api<Booking[]>(`/api/resources/bookings?from=${today}&to=${isoDate(addDays(new Date(), 13))}`),
+      api<Client[]>("/api/clients"),
     ]);
-    return { types, resources, users, bookings };
+    return { types, resources, users, bookings, clients };
   }, []);
 
   const window_ = () => {
@@ -42,7 +44,7 @@ export function Bookings() {
 
   const reserve = (r: Resource) =>
     book.run(async () => {
-      await api("/api/resources/bookings", { method: "POST", body: { resource_id: r.id, ...window_(), purpose: purpose || null } });
+      await api("/api/resources/bookings", { method: "POST", body: { resource_id: r.id, ...window_(), purpose: purpose || null, client_id: clientId || null } });
       toast(`${r.name} booked`);
       setFree((cur) => cur?.filter((x) => x.id !== r.id) ?? null);
       reload();
@@ -92,6 +94,12 @@ export function Bookings() {
                 <Field label="What it's for" hint="Optional, shown to managers">
                   <input className="input" maxLength={500} placeholder="For example: Team meeting" value={purpose} onChange={(e) => setPurpose(e.target.value)} />
                 </Field>
+                <Field label="For client" hint="Optional, for example the patient in this bed">
+                  <select className="input" value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                    <option value="">Not for a client</option>
+                    {data?.clients.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </Field>
               </div>
               {free.length ? (
                 <ul className="list">
@@ -124,7 +132,11 @@ export function Bookings() {
                       {hhmm(b.start_at)} to {hhmm(b.end_at)}
                       {canManage && `, ${who(b.booked_by)}`}
                     </span>
-                    {b.purpose && <span style={{ display: "block", fontSize: "var(--fs-sm)" }}>{b.purpose}</span>}
+                    {(b.purpose || b.client_id) && (
+                      <span style={{ display: "block", fontSize: "var(--fs-sm)" }}>
+                        {[b.purpose, b.client_id && `for ${data.clients.find((c) => c.id === b.client_id)?.name ?? "a client"}`].filter(Boolean).join(", ")}
+                      </span>
+                    )}
                   </span>
                   {(canManage || b.booked_by === me?.user.id) && (
                     <button className="btn-link" onClick={() => cancel(b)}>Cancel</button>

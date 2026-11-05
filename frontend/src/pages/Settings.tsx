@@ -39,6 +39,11 @@ export function Settings() {
               <strong>Resource bookings</strong>
               <small>Rooms, beds, vehicles or equipment people can book.</small>
             </label>
+            <label>
+              <input type="checkbox" disabled={!isOwner} checked={modules.includes("inventory")} onChange={() => toggle("inventory")} />
+              <strong>Stock</strong>
+              <small>Medicine, supplies or products that get used up, with low-stock warnings.</small>
+            </label>
           </div>
           {isOwner ? (
             <div className="form-actions" style={{ justifyContent: "flex-start" }}>

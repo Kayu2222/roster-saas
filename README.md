@@ -2,7 +2,15 @@
 
 [![CI](https://github.com/Kayu2222/roster-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/Kayu2222/roster-saas/actions/workflows/ci.yml)
 
-Multi-tenant roster & resource management SaaS (API + web app). Any company can sign up, choose the modules it needs (staff rostering, resource booking, or both), and manage its own people — fully isolated from every other company on the platform.
+Multi-tenant operations SaaS for small businesses (API + web app). Any company can sign up, switch on the features it needs, and run them fully isolated from every other company on the platform.
+
+It models the three things a small business manages, the "3P":
+
+| | What it is | Used by | Clinic example | Feature |
+|---|---|---|---|---|
+| **People** | staff with schedules and qualifications, and the clients they serve | time | nurses on shift, patients | Roster, Clients |
+| **Property** | reusable assets | time (bookings that must not overlap) | beds, consult rooms | Resource bookings |
+| **Products** | consumables | quantity (stock that must not go negative) | medicine, gloves | Stock |
 
 **Stack:** Python · FastAPI · SQLAlchemy 2 · PostgreSQL · Alembic · JWT · pytest · React · TypeScript · Vite · Docker · GitHub Actions
 **Cloud:** Azure Container Apps · Azure Database for PostgreSQL · Container Registry · Key Vault · Bicep · GitHub OIDC
@@ -19,6 +27,8 @@ Multi-tenant roster & resource management SaaS (API + web app). Any company can 
 | Rosters that make sense | Each company defines its own job roles and shift templates. Shifts are rejected if they double-book a person, need a role the person doesn't hold, end before they start, or run longer than 16 hours. Overnight shifts are handled. |
 | Two people booking the last free room at the same instant | Bookings check for overlaps **and** bump the resource's version (optimistic locking). If two requests pass the overlap check at the same moment, the second commit fails with 409 instead of creating a double booking. Tested with two real concurrent sessions. |
 | Bugs or races that slip past the application | PostgreSQL **exclusion constraints** refuse overlapping shifts and active bookings at the database level, and **check constraints** refuse anything ending before it starts. The app turns these into clean 409s. |
+| Two people taking the last box of stock at once | Stock changes are one atomic `UPDATE ... SET on_hand = on_hand - n WHERE on_hand >= n`, so the second request matches no row and gets a clear 409. A `CHECK (on_hand >= 0)` constraint backs it up. Every change also writes a row to an append-only **stock ledger**, so the current number can always be explained. |
+| A stocktake while stock is moving | Counts are compare-and-set: "set it to what I counted, only if it's still the number I saw". Otherwise 409, count again. |
 | Editing a resource someone else just changed | Edits must send the `version` they read; stale edits get 409 instead of silently overwriting. |
 
 ## Web app
@@ -28,6 +38,8 @@ A React + TypeScript single-page app in [`frontend/`](frontend), served by FastA
 - **Week board:** shifts appear as colour-coded "magnets" per job role; managers add shifts from dropdowns of their own people and shift types, and people who don't hold the required role are shown but can't be picked.
 - **Today:** who is on shift now and what is booked.
 - **Bookings:** pick a time, see only what is free, book it. Staff see only their own bookings.
+- **Clients:** the people you serve, with one history of every bed or room booked and every item used for them.
+- **Stock:** on-hand levels with a reorder meter, receive, use (optionally for a client), stocktake, and a per-product ledger.
 - **People, resources, company features** for owners and managers; staff get a read-only, personal view.
 
 ## Run with Docker (API + PostgreSQL)
@@ -132,6 +144,13 @@ It creates the resource group in `australiaeast`, deploys the infrastructure, pu
 | POST | `/api/resources/bookings` | anyone in the company |
 | GET | `/api/resources/bookings?from=&to=&resource_id=` | managers see all; staff only their own |
 | POST | `/api/resources/bookings/{id}/cancel` | own bookings; managers any |
+| GET / POST | `/api/clients?q=` | anyone in the company (search by name, email, phone) |
+| GET / PATCH | `/api/clients/{id}` | anyone; archiving: owner, manager |
+| GET | `/api/clients/{id}/activity` | bookings and stock used for this client |
+| GET / POST / PATCH | `/api/inventory/products` | read: anyone · write: owner, manager |
+| POST | `/api/inventory/products/{id}/use` | anyone (optionally `client_id`) |
+| POST | `/api/inventory/products/{id}/receive`, `/count` | owner, manager |
+| GET | `/api/inventory/movements` | the stock ledger; staff see only their own entries |
 | GET | `/health` | anyone |
 
 ## Project layout
@@ -148,9 +167,11 @@ app/
   routers/           auth, company, users
   modules/roster/    models, schemas, service (business rules), router
   modules/resources/ models, schemas, service (business rules), router
+  modules/inventory/ products, stock ledger, atomic stock changes
+  routers/clients.py the people you serve, and their combined history
 tests/               isolation, auth, roles, module gating, roster and booking rules, concurrency,
                      PostgreSQL constraints
-migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints
+migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints, 0003 clients and stock
 frontend/            React + TypeScript web app (Vite)
 app/frontend.py      serves the built web app without shadowing API routes
 Dockerfile           3-stage image (Node build, Python deps, slim runtime), non-root, migrates on start
@@ -168,6 +189,7 @@ infra/               Bicep infrastructure, one-time setup and teardown scripts
 - [x] **Step 4a** – Docker, docker-compose, PostgreSQL, Alembic migrations, database constraints, GitHub Actions CI
 - [x] **Step 4b** – Deploy to Azure Container Apps (Bicep), GitHub Actions deploys with OIDC
 - [x] **Step 5a** – Web app: sign-up with feature choice, week board, bookings, people, resources
+- [x] **Step 6** – 3P: clients (people served), stock module with ledger and race-safe quantities, bookings for a client
 - [ ] **Step 5b** – Drag and drop: move shifts on the board, floor-plan layout for resources, customisable dashboard
 
 ## Design decisions
@@ -176,6 +198,8 @@ infra/               Bicep infrastructure, one-time setup and teardown scripts
 - **One email = one company** for the MVP. Users belonging to several companies would need a membership table; deliberately left out.
 - **Business rules live in each module's `service.py`, not in the routes**, so they read as plain logic and are tested end to end.
 - **Cancelled bookings are kept**, not deleted, so there is a history of who booked what.
+- **Clients hold no sensitive data by design** (contact details and a short practical note only). It keeps the product general-purpose and avoids storing health information.
+- **Time vs quantity:** assets (booked by time) are protected by exclusion constraints and optimistic locking; products (used by quantity) by guarded atomic updates and a ledger. Same problem, different shape, matching tool.
 - **Shift times are company-local wall-clock times** (no timezone). A per-company timezone can be added without changing the tables.
 - **Two layers against double-booking:** the application checks first (clear error messages, works on any database); PostgreSQL exclusion constraints are the backstop that cannot be bypassed by concurrent requests or future bugs. Resource bookings additionally use optimistic locking.
 - **Schema changes go through Alembic migrations**; CI fails if the models and migrations drift apart (`alembic check`). Local SQLite still creates tables on startup for convenience.

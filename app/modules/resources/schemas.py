@@ -48,6 +48,7 @@ class BookingIn(BaseModel):
     start_at: datetime = Field(examples=["2026-11-10T14:00"])
     end_at: datetime = Field(examples=["2026-11-10T15:00"])
     purpose: str | None = Field(default=None, max_length=500, examples=["Team meeting"])
+    client_id: uuid.UUID | None = Field(default=None, description="Who it is for, if it is for a client")
 
 
 class BookingOut(BaseModel):
@@ -60,4 +61,5 @@ class BookingOut(BaseModel):
     purpose: str | None
     status: BookingStatus
     booked_by: uuid.UUID
+    client_id: uuid.UUID | None
     cancelled_at: datetime | None

@@ -11,6 +11,8 @@ export function Shell() {
     { to: "/roster", label: "Roster", icon: "calendar", show: hasModule("roster") },
     { to: "/bookings", label: "Bookings", icon: "clock", show: hasModule("resource") },
     { to: "/resources", label: "Resources", icon: "box", show: hasModule("resource") },
+    { to: "/stock", label: "Stock", icon: "pill", show: hasModule("inventory") },
+    { to: "/clients", label: "Clients", icon: "user", show: true },
     { to: "/people", label: "People", icon: "people", show: true },
     { to: "/settings", label: "Company", icon: "settings", show: true },
   ];
