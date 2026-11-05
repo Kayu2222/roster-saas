@@ -36,6 +36,20 @@ export function hhmm(value: string): string {
   return t.slice(0, 5);
 }
 
+/** "09:00 to 09:30", "23:00 to 07:00 (+1)", or "10:00 to Wed, 11 Nov, 11:00" for longer spans. */
+export function timeRange(start: string, end: string): string {
+  const s = parseLocal(start);
+  const e = parseLocal(end);
+  const days = Math.round(
+    (new Date(e.getFullYear(), e.getMonth(), e.getDate()).getTime() -
+      new Date(s.getFullYear(), s.getMonth(), s.getDate()).getTime()) / 86_400_000,
+  );
+  if (days === 0) return `${hhmm(start)} to ${hhmm(end)}`;
+  if (days === 1) return `${hhmm(start)} to ${hhmm(end)} (+1)`;
+  const endDay = e.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
+  return `${hhmm(start)} to ${endDay}, ${hhmm(end)}`;
+}
+
 export function dayLabel(d: Date): { weekday: string; day: string } {
   return {
     weekday: d.toLocaleDateString(undefined, { weekday: "short" }),

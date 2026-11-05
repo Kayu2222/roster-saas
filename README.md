@@ -4,6 +4,20 @@
 
 Multi-tenant operations SaaS for small businesses (API + web app). Any company can sign up, switch on the features it needs, and run them fully isolated from every other company on the platform.
 
+## Live demo
+
+**https://ca-roster-api.graysea-b70f2022.australiaeast.azurecontainerapps.io**
+
+Sign in to a demo hospital with `demo@example.com` / `riverside-demo` (manager role), or register your own company to see an empty, fully isolated tenant. API docs are at [`/docs`](https://ca-roster-api.graysea-b70f2022.australiaeast.azurecontainerapps.io/docs).
+
+The app scales to zero when idle, so the first request after a quiet spell can take around 20 seconds. The demo account is shared, so data may have been changed by other visitors. All people in it are fictional.
+
+| Week board: shifts as colour-coded magnets per job role | Bookings: find what's free, book it for a client |
+|---|---|
+| ![Week board](docs/screenshots/week-board.png) | ![Bookings](docs/screenshots/bookings.png) |
+| **Client history: every booking and item used, in one place** | **Stock: reorder meters, low-stock warnings, ledger** |
+| ![Client history](docs/screenshots/client-history.png) | ![Stock](docs/screenshots/stock.png) |
+
 It models the three things a small business manages, the "3P":
 
 | | What it is | Used by | Clinic example | Feature |
@@ -120,6 +134,18 @@ It creates the resource group in `australiaeast`, deploys the infrastructure, pu
 
 **Remove everything:** `.\infra\teardown.ps1`
 
+### Demo data
+
+[`scripts/seed_demo.py`](scripts/seed_demo.py) builds the demo hospital through the public API only (standard library, no installs), so it also works as an end-to-end check of a deployment: 7 people with job roles, two weeks of rota, beds, consult rooms and a van, clients with bookings, and stock with a ledger.
+
+```bash
+python scripts/seed_demo.py                                   # seed the live deployment
+python scripts/seed_demo.py --url http://localhost:8000       # or a local one
+python scripts/seed_demo.py --refresh                         # top up this week's and next week's rota and bookings
+```
+
+The owner password is random unless `DEMO_OWNER_PASSWORD` is set, and is printed once. `--refresh` signs in as the demo manager and skips anything that already exists (the API answers 409).
+
 ## API
 
 | Method | Path | Who |
@@ -179,6 +205,8 @@ docker-compose.yml   local API + PostgreSQL
 .github/workflows/   CI/CD: tests on SQLite and PostgreSQL, migration drift check, Docker smoke test,
                      deploy to Azure
 infra/               Bicep infrastructure, one-time setup and teardown scripts
+scripts/seed_demo.py demo hospital through the public API (also an end-to-end check)
+docs/screenshots/    images used in this README
 ```
 
 ## Roadmap
@@ -190,7 +218,8 @@ infra/               Bicep infrastructure, one-time setup and teardown scripts
 - [x] **Step 4b** – Deploy to Azure Container Apps (Bicep), GitHub Actions deploys with OIDC
 - [x] **Step 5a** – Web app: sign-up with feature choice, week board, bookings, people, resources
 - [x] **Step 6** – 3P: clients (people served), stock module with ledger and race-safe quantities, bookings for a client
-- [ ] **Step 5b** – Drag and drop: move shifts on the board, floor-plan layout for resources, customisable dashboard
+- [x] **Step 7** – Live demo: seed script, demo login, screenshots
+- **Not planned:** drag and drop on the board (originally Step 5b). Dropdowns already cover every action, and the effort is better spent on the backend.
 
 ## Design decisions
 

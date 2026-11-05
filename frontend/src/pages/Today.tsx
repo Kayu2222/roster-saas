@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { api, type Booking, type JobRole, type Product, type Resource, type Shift, type User } from "../api";
-import { hhmm, isoDate } from "../dates";
+import { isoDate, timeRange } from "../dates";
 import { useSession } from "../session";
 import { PageHead } from "../components/Shell";
 import { Empty, magnetStyle, useLoad } from "../components/ui";
@@ -61,7 +61,7 @@ export function Today() {
                       {name(s.user_id)}
                       {onNow(s) && <span className="pill" style={{ marginLeft: 8, background: "var(--marker)", color: "var(--ink)" }}>On now</span>}
                     </span>
-                    <span className="when">{hhmm(s.start_at)} to {hhmm(s.end_at)}</span>
+                    <span className="when">{timeRange(s.start_at, s.end_at)}</span>
                     {s.job_role_id && <span className="role">{data.roles.find((r) => r.id === s.job_role_id)?.name}</span>}
                   </div>
                 ))}
@@ -92,7 +92,7 @@ export function Today() {
                     </span>
                     <span className="num">
                       {onNow(b) && <span className="pill" style={{ marginRight: 8, background: "var(--marker)", color: "var(--ink)" }}>In use</span>}
-                      {hhmm(b.start_at)} to {hhmm(b.end_at)}
+                      {timeRange(b.start_at, b.end_at)}
                     </span>
                   </li>
                 ))}

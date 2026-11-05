@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { api, type Booking, type Client, type Resource, type ResourceType, type User } from "../api";
-import { addDays, hhmm, isoDate, localDateTime, parseLocal } from "../dates";
+import { addDays, isoDate, localDateTime, parseLocal, timeRange } from "../dates";
 import { useSession } from "../session";
 import { PageHead } from "../components/Shell";
 import { Empty, ErrorNote, Field, useLoad, useSubmit, useToast } from "../components/ui";
@@ -129,7 +129,7 @@ export function Bookings() {
                     <strong>{resourceName(b.resource_id)}</strong>
                     <span className="muted num" style={{ display: "block", fontSize: "var(--fs-sm)" }}>
                       {parseLocal(b.start_at).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })},{" "}
-                      {hhmm(b.start_at)} to {hhmm(b.end_at)}
+                      {timeRange(b.start_at, b.end_at)}
                       {canManage && `, ${who(b.booked_by)}`}
                     </span>
                     {(b.purpose || b.client_id) && (

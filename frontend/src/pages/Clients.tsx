@@ -47,8 +47,8 @@ export function Clients() {
                     <strong>{c.name}</strong>
                     {!c.is_active && <span className="pill" style={{ marginLeft: 8 }}>Archived</span>}
                   </td>
-                  <td className="num">{c.phone ?? <span className="muted">None</span>}</td>
-                  <td className="muted">{c.email ?? "None"}</td>
+                  <td className="num">{c.phone ?? <span className="muted">—</span>}</td>
+                  <td className="muted">{c.email ?? "—"}</td>
                   <td style={{ textAlign: "right" }}><button className="btn-link" onClick={() => setOpen(c)}>Open</button></td>
                 </tr>
               ))}
