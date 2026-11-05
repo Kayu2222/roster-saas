@@ -2,9 +2,9 @@
 
 [![CI](https://github.com/Kayu2222/roster-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/Kayu2222/roster-saas/actions/workflows/ci.yml)
 
-Multi-tenant roster & resource management API. Any company can sign up, choose the modules it needs (staff rostering, resource booking, or both), and manage its own people — fully isolated from every other company on the platform.
+Multi-tenant roster & resource management SaaS (API + web app). Any company can sign up, choose the modules it needs (staff rostering, resource booking, or both), and manage its own people — fully isolated from every other company on the platform.
 
-**Stack:** Python · FastAPI · SQLAlchemy 2 · PostgreSQL · Alembic · JWT · pytest · Docker · GitHub Actions
+**Stack:** Python · FastAPI · SQLAlchemy 2 · PostgreSQL · Alembic · JWT · pytest · React · TypeScript · Vite · Docker · GitHub Actions
 **Cloud:** Azure Container Apps · Azure Database for PostgreSQL · Container Registry · Key Vault · Bicep · GitHub OIDC
 
 ## Why it's interesting
@@ -21,6 +21,15 @@ Multi-tenant roster & resource management API. Any company can sign up, choose t
 | Bugs or races that slip past the application | PostgreSQL **exclusion constraints** refuse overlapping shifts and active bookings at the database level, and **check constraints** refuse anything ending before it starts. The app turns these into clean 409s. |
 | Editing a resource someone else just changed | Edits must send the `version` they read; stale edits get 409 instead of silently overwriting. |
 
+## Web app
+
+A React + TypeScript single-page app in [`frontend/`](frontend), served by FastAPI from the same origin as the API (one URL, no CORS).
+
+- **Week board:** shifts appear as colour-coded "magnets" per job role; managers add shifts from dropdowns of their own people and shift types, and people who don't hold the required role are shown but can't be picked.
+- **Today:** who is on shift now and what is booked.
+- **Bookings:** pick a time, see only what is free, book it. Staff see only their own bookings.
+- **People, resources, company features** for owners and managers; staff get a read-only, personal view.
+
 ## Run with Docker (API + PostgreSQL)
 
 ```bash
@@ -31,6 +40,8 @@ Open http://localhost:8000/docs. The container applies the database migrations o
 
 ## Run locally without Docker (SQLite)
 
+API:
+
 ```bash
 python -m venv .venv
 .venv\Scripts\activate          # Windows  (macOS/Linux: source .venv/bin/activate)
@@ -40,6 +51,14 @@ uvicorn app.main:app --reload
 ```
 
 Open http://localhost:8000/docs, call `POST /api/auth/register`, then click **Authorize** and paste the `access_token`.
+
+Web app with live reload (needs Node 22), in a second terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev            # http://localhost:5173, forwards /api to :8000
+```
 
 ```bash
 pytest -q                     # fast, in-memory SQLite
@@ -132,7 +151,9 @@ app/
 tests/               isolation, auth, roles, module gating, roster and booking rules, concurrency,
                      PostgreSQL constraints
 migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints
-Dockerfile           multi-stage image, runs as non-root, migrates on start
+frontend/            React + TypeScript web app (Vite)
+app/frontend.py      serves the built web app without shadowing API routes
+Dockerfile           3-stage image (Node build, Python deps, slim runtime), non-root, migrates on start
 docker-compose.yml   local API + PostgreSQL
 .github/workflows/   CI/CD: tests on SQLite and PostgreSQL, migration drift check, Docker smoke test,
                      deploy to Azure
@@ -145,8 +166,9 @@ infra/               Bicep infrastructure, one-time setup and teardown scripts
 - [x] **Step 2** – Roster module: company-defined roles and shift types, date-based shifts, clash checks
 - [x] **Step 3** – Resource module: company-defined resource types, bookings with overlap checks, optimistic locking
 - [x] **Step 4a** – Docker, docker-compose, PostgreSQL, Alembic migrations, database constraints, GitHub Actions CI
-- [ ] **Step 4b** – Deploy to Azure Container Apps with GitHub Actions (OIDC) and Key Vault
-- [ ] **Step 5** – Web front end
+- [x] **Step 4b** – Deploy to Azure Container Apps (Bicep), GitHub Actions deploys with OIDC
+- [x] **Step 5a** – Web app: sign-up with feature choice, week board, bookings, people, resources
+- [ ] **Step 5b** – Drag and drop: move shifts on the board, floor-plan layout for resources, customisable dashboard
 
 ## Design decisions
 

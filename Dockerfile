@@ -1,4 +1,13 @@
-# ---- build stage: install dependencies into a virtualenv ----
+# ---- web stage: build the React app into static files ----
+FROM node:22-alpine AS web
+WORKDIR /web
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+COPY frontend/ ./
+RUN npm run build
+
+
+# ---- build stage: install Python dependencies into a virtualenv ----
 FROM python:3.12-slim AS builder
 
 RUN python -m venv /opt/venv
@@ -7,7 +16,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 
-# ---- runtime stage: only the venv and the app, no build tools ----
+# ---- runtime stage: only the venv, the app and the built web files; no Node, no build tools ----
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -23,6 +32,7 @@ COPY --from=builder /opt/venv /opt/venv
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
+COPY --from=web /web/dist ./web
 
 USER appuser
 EXPOSE 8000

@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from app.core.config import settings
 from app.core.errors import DomainError, domain_error_handler
 from app.db import Base, engine
+from app.frontend import find_web_dir, register_frontend
 from app.modules.resources import models as _resource_models  # noqa: F401  (registers tables)
 from app.modules.resources.router import router as resource_router
 from app.modules.roster import models as _roster_models  # noqa: F401  (registers tables)
@@ -23,7 +24,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.4.0",
+    version="0.5.0",
     description="Multi-tenant roster & resource management. Companies sign up and choose their modules.",
     lifespan=lifespan,
 )
@@ -40,3 +41,7 @@ app.include_router(resource_router)
 @app.get("/health", tags=["Ops"])
 def health():
     return {"status": "ok"}
+
+
+# The web app is served last so every API route above takes priority.
+register_frontend(app, find_web_dir())
