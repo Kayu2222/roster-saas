@@ -1,0 +1,80 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Tests (${{ matrix.db }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        db: [sqlite, postgres]
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: roster
+          POSTGRES_PASSWORD: roster
+          POSTGRES_DB: roster_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U roster"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements-dev.txt
+
+      - name: Check migrations match the models
+        if: matrix.db == 'postgres'
+        env:
+          DATABASE_URL: postgresql+psycopg://roster:roster@localhost:5432/roster_test
+        run: |
+          alembic upgrade head
+          alembic check
+
+      - name: Run tests
+        env:
+          # Empty for the sqlite run; the postgres run uses the real migrated schema.
+          TEST_DATABASE_URL: ${{ matrix.db == 'postgres' && 'postgresql+psycopg://roster:roster@localhost:5432/roster_test' || '' }}
+        run: pytest -q
+
+  docker:
+    name: Docker image builds and starts
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Start the stack
+        run: docker compose up -d --build --wait --wait-timeout 120
+
+      - name: Smoke test
+        run: |
+          curl -fsS http://localhost:8000/health
+          curl -fsS -X POST http://localhost:8000/api/auth/register \
+            -H "Content-Type: application/json" \
+            -d '{"company_name":"CI Co","owner_name":"CI","email":"ci@example.com","password":"Passw0rd!","modules":["roster","resource"]}'
+
+      - name: Logs on failure
+        if: failure()
+        run: docker compose logs
+
+      - name: Stop
+        if: always()
+        run: docker compose down -v

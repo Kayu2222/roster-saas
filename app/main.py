@@ -14,14 +14,16 @@ from app.routers import auth, tenant, users
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Creates missing tables. Step 4 (PostgreSQL on Azure) switches to Alembic migrations.
-    Base.metadata.create_all(engine)
+    # Local SQLite: create tables directly for convenience.
+    # PostgreSQL (Docker / Azure): the schema is managed by Alembic (`alembic upgrade head`).
+    if engine.dialect.name == "sqlite":
+        Base.metadata.create_all(engine)
     yield
 
 
 app = FastAPI(
     title=settings.app_name,
-    version="0.3.0",
+    version="0.4.0",
     description="Multi-tenant roster & resource management. Companies sign up and choose their modules.",
     lifespan=lifespan,
 )

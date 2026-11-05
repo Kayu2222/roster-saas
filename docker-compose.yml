@@ -1,0 +1,33 @@
+# Local stack: the API + PostgreSQL, exactly as it will run in the cloud.
+#   docker compose up --build        then open http://localhost:8000/docs
+#   docker compose down -v           stop and delete the database
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: roster
+      POSTGRES_PASSWORD: roster
+      POSTGRES_DB: roster
+    ports:
+      - "5433:5432"   # 5433 on your machine, so it won't clash with another local PostgreSQL
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U roster -d roster"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: .
+    environment:
+      DATABASE_URL: postgresql+psycopg://roster:roster@db:5432/roster
+      JWT_SECRET: local-docker-only-not-a-real-secret-0123456789
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  pgdata:

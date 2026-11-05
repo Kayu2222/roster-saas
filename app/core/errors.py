@@ -6,6 +6,7 @@ turns it into a JSON response. Services never import FastAPI.
 
 from fastapi import Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import IntegrityError
 
 
 class DomainError(Exception):
@@ -13,6 +14,15 @@ class DomainError(Exception):
         super().__init__(message)
         self.status_code = status_code
         self.message = message
+
+
+def is_overlap_violation(exc: IntegrityError) -> bool:
+    """True when PostgreSQL refused a row because of an exclusion constraint (SQLSTATE 23P01).
+
+    That is the database-level backstop for overlapping shifts and bookings
+    (see migrations/versions/0002_overlap_constraints.py).
+    """
+    return getattr(exc.orig, "sqlstate", None) == "23P01"
 
 
 async def domain_error_handler(_: Request, exc: DomainError) -> JSONResponse:

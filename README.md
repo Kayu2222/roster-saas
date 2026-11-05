@@ -1,9 +1,11 @@
 # Roster SaaS
 
+[![CI](https://github.com/Kayu2222/roster-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/Kayu2222/roster-saas/actions/workflows/ci.yml)
+
 Multi-tenant roster & resource management API. Any company can sign up, choose the modules it needs (staff rostering, resource booking, or both), and manage its own people — fully isolated from every other company on the platform.
 
-**Stack:** Python · FastAPI · SQLAlchemy 2 · PostgreSQL (SQLite locally) · JWT · pytest
-**Planned deployment:** Docker · GitHub Actions · Azure Container Apps
+**Stack:** Python · FastAPI · SQLAlchemy 2 · PostgreSQL · Alembic · JWT · pytest · Docker · GitHub Actions
+**Planned deployment:** Azure Container Apps
 
 ## Why it's interesting
 
@@ -16,9 +18,18 @@ Multi-tenant roster & resource management API. Any company can sign up, choose t
 | Credentials | Passwords hashed with bcrypt, never returned by the API. Login gives the same error for unknown email and wrong password. |
 | Rosters that make sense | Each company defines its own job roles and shift templates. Shifts are rejected if they double-book a person, need a role the person doesn't hold, end before they start, or run longer than 16 hours. Overnight shifts are handled. |
 | Two people booking the last free room at the same instant | Bookings check for overlaps **and** bump the resource's version (optimistic locking). If two requests pass the overlap check at the same moment, the second commit fails with 409 instead of creating a double booking. Tested with two real concurrent sessions. |
+| Bugs or races that slip past the application | PostgreSQL **exclusion constraints** refuse overlapping shifts and active bookings at the database level, and **check constraints** refuse anything ending before it starts. The app turns these into clean 409s. |
 | Editing a resource someone else just changed | Edits must send the `version` they read; stale edits get 409 instead of silently overwriting. |
 
-## Run locally
+## Run with Docker (API + PostgreSQL)
+
+```bash
+docker compose up --build
+```
+
+Open http://localhost:8000/docs. The container applies the database migrations on start. `docker compose down -v` stops everything and deletes the data.
+
+## Run locally without Docker (SQLite)
 
 ```bash
 python -m venv .venv
@@ -31,7 +42,16 @@ uvicorn app.main:app --reload
 Open http://localhost:8000/docs, call `POST /api/auth/register`, then click **Authorize** and paste the `access_token`.
 
 ```bash
-pytest -q
+pytest -q                     # fast, in-memory SQLite
+```
+
+To run the same suite against PostgreSQL with the real migrated schema (CI does both):
+
+```bash
+docker compose up -d db
+# PowerShell: $env:TEST_DATABASE_URL="postgresql+psycopg://roster:roster@localhost:5433/roster"
+export TEST_DATABASE_URL=postgresql+psycopg://roster:roster@localhost:5433/roster
+pytest -q                     # wipes that database first
 ```
 
 ## API
@@ -74,7 +94,12 @@ app/
   routers/           auth, company, users
   modules/roster/    models, schemas, service (business rules), router
   modules/resources/ models, schemas, service (business rules), router
-tests/               isolation, auth, roles, module gating, roster and booking rules, concurrency
+tests/               isolation, auth, roles, module gating, roster and booking rules, concurrency,
+                     PostgreSQL constraints
+migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints
+Dockerfile           multi-stage image, runs as non-root, migrates on start
+docker-compose.yml   local API + PostgreSQL
+.github/workflows/   CI: tests on SQLite and PostgreSQL, migration drift check, Docker smoke test
 ```
 
 ## Roadmap
@@ -82,7 +107,8 @@ tests/               isolation, auth, roles, module gating, roster and booking r
 - [x] **Step 1** – Multi-tenant core: sign-up, login, roles, module switching, isolation tests
 - [x] **Step 2** – Roster module: company-defined roles and shift types, date-based shifts, clash checks
 - [x] **Step 3** – Resource module: company-defined resource types, bookings with overlap checks, optimistic locking
-- [ ] **Step 4** – Docker, GitHub Actions (OIDC), Azure Container Apps, PostgreSQL, Alembic, Key Vault
+- [x] **Step 4a** – Docker, docker-compose, PostgreSQL, Alembic migrations, database constraints, GitHub Actions CI
+- [ ] **Step 4b** – Deploy to Azure Container Apps with GitHub Actions (OIDC) and Key Vault
 - [ ] **Step 5** – Web front end
 
 ## Design decisions
@@ -92,5 +118,5 @@ tests/               isolation, auth, roles, module gating, roster and booking r
 - **Business rules live in each module's `service.py`, not in the routes**, so they read as plain logic and are tested end to end.
 - **Cancelled bookings are kept**, not deleted, so there is a history of who booked what.
 - **Shift times are company-local wall-clock times** (no timezone). A per-company timezone can be added without changing the tables.
-- **Known limitation (roster):** the shift double-booking check runs in application code, so two simultaneous requests for the same person could both pass it. Resource bookings already close this gap with optimistic locking; for shifts, PostgreSQL (step 4) adds a database-level exclusion constraint.
-- Tables are created on startup for now; migrations (Alembic) come with PostgreSQL in step 4.
+- **Two layers against double-booking:** the application checks first (clear error messages, works on any database); PostgreSQL exclusion constraints are the backstop that cannot be bypassed by concurrent requests or future bugs. Resource bookings additionally use optimistic locking.
+- **Schema changes go through Alembic migrations**; CI fails if the models and migrations drift apart (`alembic check`). Local SQLite still creates tables on startup for convenience.

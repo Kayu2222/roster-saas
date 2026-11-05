@@ -11,9 +11,10 @@ import uuid
 from datetime import date, datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.errors import DomainError
+from app.core.errors import DomainError, is_overlap_violation
 from app.models import User
 from app.modules.roster.models import JobRole, Shift, ShiftType, StaffJobRole
 from app.modules.roster.schemas import ShiftIn
@@ -147,7 +148,14 @@ def create_shift(db: Session, body: ShiftIn, created_by: uuid.UUID) -> Shift:
         created_by=created_by,
     )
     db.add(shift)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError as exc:
+        db.rollback()
+        # Another request rostered this person at the same instant; PostgreSQL refused the second row.
+        if is_overlap_violation(exc):
+            raise RosterError(409, f"{user.name} already has a shift at this time")
+        raise
     return shift
 
 

@@ -17,7 +17,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
-from app.core.errors import DomainError
+from app.core.errors import DomainError, is_overlap_violation
 from app.models import Role, User
 from app.modules.resources.models import Booking, BookingStatus, Resource, ResourceStatus, ResourceType
 from app.modules.resources.schemas import BookingIn, ResourceIn, ResourceUpdate
@@ -35,8 +35,10 @@ def _commit_or_conflict(db: Session) -> None:
     except StaleDataError:
         db.rollback()
         raise DomainError(409, _CHANGED_BY_SOMEONE_ELSE)
-    except IntegrityError:
+    except IntegrityError as exc:
         db.rollback()
+        if is_overlap_violation(exc):
+            raise DomainError(409, "This resource is already booked at this time")
         raise DomainError(409, "A resource with this name already exists")
 
 
