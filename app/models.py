@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, DateTime, Enum, String, Text, Uuid, false
+from sqlalchemy import Boolean, DateTime, Enum, Integer, String, Text, Uuid, false
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.tenancy import TenantScoped
@@ -83,3 +83,19 @@ class Client(TenantScoped, Base):
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+
+
+class LoginThrottle(Base):
+    """Recent failed sign-ins for one email address, whether or not an account exists.
+
+    NOT tenant-scoped: sign-in happens before we know the company. Kept in the database
+    (not in memory) so it survives restarts and holds across several app replicas.
+    See app/core/login_throttle.py.
+    """
+
+    __tablename__ = "login_throttle"
+
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    failures: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    window_started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    locked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

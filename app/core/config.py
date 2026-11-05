@@ -13,6 +13,11 @@ class Settings(BaseSettings):
     jwt_secret: str = "dev-only-change-me-please-32-bytes-min"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60
+    # Brute-force protection: this many failed sign-ins for one email within the window
+    # locks that email for the lockout period (see app/core/login_throttle.py).
+    login_max_failures: int = 5
+    login_window_minutes: int = 15
+    login_lockout_minutes: int = 15
 
 
 settings = Settings()

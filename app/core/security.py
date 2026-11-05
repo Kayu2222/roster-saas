@@ -17,6 +17,11 @@ def verify_password(plain: str, hashed: str) -> bool:
     return bcrypt.checkpw(plain.encode("utf-8"), hashed.encode("utf-8"))
 
 
+# Checked against when the email is unknown, so a failed login takes the same time
+# whether or not the account exists (timing must not reveal registered emails).
+DUMMY_PASSWORD_HASH = bcrypt.hashpw(b"no-account-has-this-password", bcrypt.gensalt()).decode("utf-8")
+
+
 def create_access_token(user_id: uuid.UUID, tenant_id: uuid.UUID, role: str) -> str:
     now = datetime.now(timezone.utc)
     payload = {

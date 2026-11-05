@@ -37,7 +37,8 @@ It models the three things a small business manages, the "3P":
 | Forgetting to set a tenant shouldn't leak data | Querying tenant data with no tenant context **fails loudly** instead of returning all rows. The only opt-out is explicit (`bypass_tenant=True`), used only by login/sign-up. |
 | Companies need different features | Each company switches modules on or off; endpoints are gated with `require_module(...)`. |
 | Who can do what | Roles: `owner` (one per company, controls modules), `manager`, `staff`. |
-| Credentials | Passwords hashed with bcrypt, never returned by the API. Login gives the same error for unknown email and wrong password. |
+| Credentials | Passwords hashed with bcrypt, never returned by the API. Login gives the same error, and takes the same bcrypt time, for an unknown email and a wrong password. |
+| Password guessing | 5 failed sign-ins for one email within 15 minutes lock that email for 15 minutes (429 + `Retry-After`), even for the right password. Unknown emails are counted and locked exactly like real ones, so the lockout can't be used to discover accounts. The count lives in PostgreSQL and is read with `SELECT ... FOR UPDATE`: 20 simultaneous guesses against 4 workers produced exactly 4 401s and 16 429s. |
 | Rosters that make sense | Each company defines its own job roles and shift templates. Shifts are rejected if they double-book a person, need a role the person doesn't hold, end before they start, or run longer than 16 hours. Overnight shifts are handled. |
 | Two people booking the last free room at the same instant | Bookings check for overlaps **and** bump the resource's version (optimistic locking). If two requests pass the overlap check at the same moment, the second commit fails with 409 instead of creating a double booking. Tested with two real concurrent sessions. |
 | Bugs or races that slip past the application | PostgreSQL **exclusion constraints** refuse overlapping shifts and active bookings at the database level, and **check constraints** refuse anything ending before it starts. The app turns these into clean 409s. |
@@ -151,7 +152,7 @@ The owner password is random unless `DEMO_OWNER_PASSWORD` is set, and is printed
 | Method | Path | Who |
 |---|---|---|
 | POST | `/api/auth/register` | anyone: creates company + owner, picks modules |
-| POST | `/api/auth/login` | anyone |
+| POST | `/api/auth/login` | anyone (429 after repeated failures for that email) |
 | GET | `/api/me` | any signed-in user |
 | GET | `/api/tenant` | any signed-in user |
 | PUT | `/api/tenant/modules` | owner |
@@ -187,6 +188,7 @@ app/
   core/security.py   bcrypt + JWT
   core/tenancy.py    automatic tenant isolation (the key file)
   core/errors.py     one business-rule error type, one handler
+  core/login_throttle.py  brute-force protection: failed sign-ins per email, temporary lockout
   models.py          Tenant, User
   schemas.py         request/response models
   deps.py            current user, role and module checks
@@ -197,7 +199,8 @@ app/
   routers/clients.py the people you serve, and their combined history
 tests/               isolation, auth, roles, module gating, roster and booking rules, concurrency,
                      PostgreSQL constraints
-migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints, 0003 clients and stock
+migrations/          Alembic: 0001 schema, 0002 exclusion + check constraints, 0003 clients and stock,
+                     0004 sign-in throttle
 frontend/            React + TypeScript web app (Vite)
 app/frontend.py      serves the built web app without shadowing API routes
 Dockerfile           3-stage image (Node build, Python deps, slim runtime), non-root, migrates on start
@@ -219,6 +222,7 @@ docs/screenshots/    images used in this README
 - [x] **Step 5a** – Web app: sign-up with feature choice, week board, bookings, people, resources
 - [x] **Step 6** – 3P: clients (people served), stock module with ledger and race-safe quantities, bookings for a client
 - [x] **Step 7** – Live demo: seed script, demo login, screenshots
+- [x] **Step 8** – Brute-force protection: per-email lockout after repeated failed sign-ins, constant-time failures
 - **Not planned:** drag and drop on the board (originally Step 5b). Dropdowns already cover every action, and the effort is better spent on the backend.
 
 ## Design decisions
@@ -231,4 +235,5 @@ docs/screenshots/    images used in this README
 - **Time vs quantity:** assets (booked by time) are protected by exclusion constraints and optimistic locking; products (used by quantity) by guarded atomic updates and a ledger. Same problem, different shape, matching tool.
 - **Shift times are company-local wall-clock times** (no timezone). A per-company timezone can be added without changing the tables.
 - **Two layers against double-booking:** the application checks first (clear error messages, works on any database); PostgreSQL exclusion constraints are the backstop that cannot be bypassed by concurrent requests or future bugs. Resource bookings additionally use optimistic locking.
+- **Account lockout is per email, not per IP.** It stops password guessing against one account even from many machines, and counting unknown emails too keeps it from leaking which accounts exist. The known cost: someone who knows an email can lock it for 15 minutes (the shared demo login included). Per-IP rate limits at the edge (Azure Front Door or API Management) are the next layer for real traffic.
 - **Schema changes go through Alembic migrations**; CI fails if the models and migrations drift apart (`alembic check`). Local SQLite still creates tables on startup for convenience.
