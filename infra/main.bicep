@@ -2,7 +2,7 @@
 //
 //   GitHub Actions --(OIDC, no stored password)--> deploy identity
 //        builds image --> Container Registry --> Container App (HTTPS, scales to zero)
-//                                                  |-- reads secrets from Key Vault (managed identity)
+//                                                  |-- encrypted app secrets (copies of Key Vault values)
 //                                                  '-- talks to PostgreSQL Flexible Server
 //
 // Sizes are pinned to the cheapest options covered by Azure for Students.
@@ -36,12 +36,12 @@ param containerImage string = ''
 var suffix = uniqueString(resourceGroup().id)
 var postgresAdminUser = 'rosteradmin'
 var databaseName = 'roster'
+var databaseUrl = 'postgresql+psycopg://${postgresAdminUser}:${uriComponent(postgresAdminPassword)}@${postgres.properties.fullyQualifiedDomainName}:5432/${databaseName}?sslmode=require'
 
 // Built-in Azure role IDs (same in every tenant).
 var roles = {
   acrPull: '7f951dda-4ed3-4680-a7ca-43fe172d538d'
   acrPush: '8311e382-0749-4cb8-b61a-304f252e45ec'
-  keyVaultSecretsUser: '4633458b-17de-408a-b874-0445c86b69e6'
   contributor: 'b24988ac-6180-42a0-ab88-20f7382dd24c'
 }
 
@@ -180,7 +180,7 @@ resource allowAzureServices 'Microsoft.DBforPostgreSQL/flexibleServers/firewallR
 }
 
 // ---------------------------------------------------------------------------
-// Key Vault: the only place the secrets live
+// Key Vault: system of record for the secrets (rotate here, then re-run setup.ps1)
 // ---------------------------------------------------------------------------
 resource vault 'Microsoft.KeyVault/vaults@2023-07-01' = {
   name: 'kv-${appName}-${take(suffix, 10)}'
@@ -197,7 +197,7 @@ resource databaseUrlSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   parent: vault
   name: 'database-url'
   properties: {
-    value: 'postgresql+psycopg://${postgresAdminUser}:${uriComponent(postgresAdminPassword)}@${postgres.properties.fullyQualifiedDomainName}:5432/${databaseName}?sslmode=require'
+    value: databaseUrl
   }
 }
 
@@ -209,23 +209,21 @@ resource jwtSecretSecret 'Microsoft.KeyVault/vaults/secrets@2023-07-01' = {
   }
 }
 
-resource appCanReadSecrets 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: vault
-  name: guid(vault.id, appIdentity.id, roles.keyVaultSecretsUser)
-  properties: {
-    principalId: appIdentity.properties.principalId
-    principalType: 'ServicePrincipal'
-    roleDefinitionId: subscriptionResourceId('Microsoft.Authorization/roleDefinitions', roles.keyVaultSecretsUser)
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Container Apps (Consumption plan: monthly free grant, scales to zero when idle)
+// Container Apps (Consumption profile: monthly free grant, scales to zero when idle)
 // ---------------------------------------------------------------------------
 resource environment 'Microsoft.App/managedEnvironments@2024-03-01' = {
   name: 'cae-${appName}'
   location: location
   properties: {
+    // Declaring the serverless Consumption profile makes this a full (workload profiles) environment.
+    // Without it, Azure may create an 'express' environment, which cannot read secrets from Key Vault.
+    workloadProfiles: [
+      {
+        name: 'Consumption'
+        workloadProfileType: 'Consumption'
+      }
+    ]
     appLogsConfiguration: {
       destination: 'log-analytics'
       logAnalyticsConfiguration: {
@@ -245,6 +243,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
   }
   properties: {
     managedEnvironmentId: environment.id
+    workloadProfileName: 'Consumption'
     configuration: {
       activeRevisionsMode: 'Single'
       ingress: {
@@ -259,18 +258,11 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
           identity: appIdentity.id
         }
       ]
-      // Container Apps fetches these from Key Vault using the app's identity.
+      // Stored encrypted by Container Apps and set at deploy time. (Key Vault references would be
+      // nicer, but this region runs Container Apps 'express' environments, which don't support them.)
       secrets: [
-        {
-          name: 'database-url'
-          keyVaultUrl: databaseUrlSecret.properties.secretUri
-          identity: appIdentity.id
-        }
-        {
-          name: 'jwt-secret'
-          keyVaultUrl: jwtSecretSecret.properties.secretUri
-          identity: appIdentity.id
-        }
+        { name: 'database-url', value: databaseUrl }
+        { name: 'jwt-secret', value: jwtSecret }
       ]
     }
     template: {
@@ -308,7 +300,7 @@ resource app 'Microsoft.App/containerApps@2024-03-01' = if (deployApp) {
       }
     }
   }
-  dependsOn: [appCanPull, appCanReadSecrets, allowAzureServices]
+  dependsOn: [appCanPull, allowAzureServices, databaseUrlSecret, jwtSecretSecret]
 }
 
 // ---------------------------------------------------------------------------
